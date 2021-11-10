@@ -1,3 +1,16 @@
+﻿# TODO:
+# [v] シャットダウン時刻を毎分00秒にする
+# [v] 指定した時刻にshutdown.exeが実行されるのではなく、指定した時刻にシャットダウンがされるようにする
+# [v] shutdown.exeが走ったあとでも取り消しができるように
+# [ ] 過去時刻 or 現在時刻＋タイムアウトより前の時間指定はエラーにする
+# [ ] UIをXAMLで作り直す
+# [ ] 時刻は15分刻みで上下するようスピンボタンの動作を変更
+# [ ] シャットダウンしたらまずい環境（管理者権限のないCitrix上のVMなど）のため、シャットダウンでなく再起動(shutdown.exe /r /t 300)ができるように
+# [ ] 設定を保存できるようにする
+# [ ] シャットダウンまでのタイムアウト時間を設定可能にする
+
+$TimeoutPeriod = 300
+
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
 
@@ -8,6 +21,7 @@ function UnregisterTask() {
     $Task = (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
     if ($Task -ne $null) {
         Unregister-ScheduledTask -TaskName $Task.TaskName -AsJob
+        Start-Process -FilePath shutdown.exe -ArgumentList "/a" -Wait
         [Windows.Forms.MessageBox]::Show("シャットダウンを解除しました。", "シャットダウン解除済み")
     } else {
         [Windows.Forms.MessageBox]::Show("シャットダウンは登録されていません。", "シャットダウン未登録")
@@ -19,10 +33,10 @@ function RegisterTask {
 
     $Task = (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
     if ($Task -eq $null) {
-        $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument "/s /t 300"
-        $TaskTrigger = New-ScheduledTaskTrigger -Once -At $DateTime
+        $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + $TimeoutPeriod)
+        $TaskTrigger = New-ScheduledTaskTrigger -Once -At $DateTime.AddSeconds(-$TimeoutPeriod).ToShortTimeString()
         Register-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger
-        [Windows.Forms.MessageBox]::Show("シャットダウンを登録しました。" + $DateTime.ToShortTimeString(), "シャットダウン登録済み")
+        [Windows.Forms.MessageBox]::Show("シャットダウン (" + $DateTime.ToShortTimeString() + ") を登録しました。", "シャットダウン登録済み")
     } else {
         [Windows.Forms.MessageBox]::Show("すでにシャットダウンが予定されています。", "シャットダウン登録済み")
     }
