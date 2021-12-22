@@ -1,15 +1,53 @@
-﻿# TODO:
-# [v] シャットダウン時刻を毎分00秒にする
-# [v] 指定した時刻にshutdown.exeが実行されるのではなく、指定した時刻にシャットダウンがされるようにする
-# [v] shutdown.exeが走ったあとでも取り消しができるように
-# [v] 過去時刻 or 現在時刻＋タイムアウトより前の時間指定はエラーにする
-# [x] UIをXAMLで作り直す -> XAMLのTimePickerにスピンボタンがないため不適
-# [x] 時刻は15分刻みで上下するようスピンボタンの動作を変更 -> キーボードからの時刻入力と併用できない
-# [v] シャットダウンしたらまずい環境（管理者権限のないCitrix上のVMなど）のため、シャットダウンでなく再起動(shutdown.exe /r /t 300)ができるように
-# [ ] 設定を保存できるようにする
-# [ ] シャットダウンまでのタイムアウト時間を設定可能にする
-# [ ] 日付けまたぎの処理ができるようにする（TimeSpan.TicksPerMinuteを使う？）
+﻿<# 
+MIT License
 
+Copyright (c) 2021 SATO Yusuke
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+#>
+<# 
+TODO:
+  [v] シャットダウン時刻を毎分00秒にする
+  [v] 指定した時刻にshutdown.exeが実行されるのではなく、指定した時刻にシャットダウンがされるようにする
+  [v] shutdown.exeが走ったあとでも取り消しができるように
+  [v] 過去時刻 or 現在時刻＋タイムアウトより前の時間指定はエラーにする
+  [x] UIをXAMLで作り直す -> TimePickerはWinUIがないと使えない＆XAMLのTimePickerにスピンボタンがないため不適
+  [ ] 時刻は15分刻みで上下するようスピンボタンの動作を変更 -> キーボードからの時刻入力と併用できない？
+  [v] シャットダウンしたらまずい環境（管理者権限のないCitrix上のVMなど）のため、シャットダウンでなく再起動(shutdown.exe /r /t 300)ができるように
+  [ ] 設定を保存できるようにする。自己書き換えできる？
+  [ ] シャットダウンまでのタイムアウト時間を設定可能にする
+  [ ] 日付けまたぎの処理ができるようにする（TimeSpan.TicksPerMinuteを使う？）
+  [ ] TimePickerで時と分が連動して増加/減少するようにする
+  [ ] マウスホイールで時間の増減ができるように、またはプルダウンでもよい
+  [ ] shutdown.exeが走ったあとにタスクがちゃんと消えるようにする
+  [v] ライセンスとファイルを一体化
+  [ ] タスクスケジューラのルートフォルダにすでに「Shutdown」というタスクがあった場合に以下のエラーが出る問題の対処
+  --------------------------------
+  Register-ScheduledTask : アクセスが拒否されました。
+  発生場所 C:\home\satob\git\Shutdown\ShutdownRegister.ps1:55 文字:9
+  +         Register-ScheduledTask -TaskPath $TaskPath -TaskName $TaskNam ...
+  +         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : PermissionDenied: (PS_ScheduledTask:Root/Microsoft/...S_ScheduledTask) [Register-ScheduledTask], CimException
+      + FullyQualifiedErrorId : HRESULT 0x80070005,Register-ScheduledTask
+  --------------------------------
+  [v] すでに登録されていた場合はエラーを返すのではなく削除してから再登録にする
+#>
 $TimeoutPeriod = 300
 
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
@@ -44,18 +82,19 @@ function RegisterTask {
     }
 
     $Task = (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
-    if ($Task -eq $null) {
-        if ($Reboot) {
-            $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/r /t " + $TimeoutPeriod)
-        } else {
-            $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + $TimeoutPeriod)
-        }
-        $TaskTrigger = New-ScheduledTaskTrigger -Once -At $TriggerTime
-        Register-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger
-        [Windows.Forms.MessageBox]::Show("シャットダウン (" + $DateTime.ToShortTimeString() + ") を登録しました。", "シャットダウン登録済み")
-    } else {
-        [Windows.Forms.MessageBox]::Show("すでにシャットダウンが予定されています。", "シャットダウン登録済み")
+    if ($Task -ne $null) {
+        Unregister-ScheduledTask -TaskName $Task.TaskName -AsJob
+        Start-Process -FilePath shutdown.exe -ArgumentList "/a" -Wait
     }
+
+    if ($Reboot) {
+        $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/r /t " + $TimeoutPeriod)
+    } else {
+        $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + $TimeoutPeriod)
+    }
+    $TaskTrigger = New-ScheduledTaskTrigger -Once -At $TriggerTime
+    Register-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger
+    [Windows.Forms.MessageBox]::Show("シャットダウン (" + $DateTime.ToShortTimeString() + ") を登録しました。", "シャットダウン登録済み")
 }
 
 function Roundup5Minutes() {
