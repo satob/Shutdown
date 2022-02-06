@@ -47,7 +47,18 @@ TODO:
       + FullyQualifiedErrorId : HRESULT 0x80070005,Register-ScheduledTask
   --------------------------------
   [v] すでに登録されていた場合はエラーを返すのではなく削除してから再登録にする
+  [v] 実行時にコマンドプロンプトを隠す
+  [v] ウィンドウにアイコンを変更する
+  [ ] タスクバーのアイコンを変更する
 #>
+Add-Type -Name Window -Namespace Console -MemberDefinition '
+[DllImport("Kernel32.dll")]
+public static extern IntPtr GetConsoleWindow();
+
+[DllImport("user32.dll")]
+public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+'
+
 $TimeoutPeriod = 300
 
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
@@ -108,12 +119,34 @@ function Roundup5Minutes() {
 }
 
 
+# コマンドプロンプトを隠す
+$consolePtr = [Console.Window]::GetConsoleWindow()
+[Console.Window]::ShowWindow($consolePtr, 0)
+
 # フォームの作成
 $Form = New-Object System.Windows.Forms.Form
 $Form.Size = New-Object System.Drawing.Size(300,120)
 $Form.FormBorderStyle = [Windows.Forms.FormBorderStyle]::FixedSingle
 $Form.Text = "シャットダウン設定君"
 
+# How to make gzip compressed Base64 string
+# $byteArray = (Get-Content -Encoding Byte -Raw .\ShutdownRegister.ico)
+# [System.IO.MemoryStream] $output = New-Object System.IO.MemoryStream
+# $gzipStream = New-Object System.IO.Compression.GzipStream $output, ([IO.Compression.CompressionMode]::Compress)
+# $gzipStream.Write( $byteArray, 0, $byteArray.Length )
+# $gzipStream.Close()
+# $output.Close()
+# [System.Convert]::ToBase64String($output.ToArray()) | Set-Clipboard
+
+$FormIconGZipBase64 = 'H4sIAAAAAAAEAJ1VT4jjZBx9ww7M4r+Zk6dgC4oICg6echBTBEGQZYel0GPn5E3akwcRUxSsh0JGBK9fD6v2ljnZY7JMYdGDGfAioiQLAz3MITl4qG7t86X/Jp1md8AvfUn4ve/35f3e90sK7OioVqHzbQxuAy8CeE1QCDUs4k8fnfkPnc7ikh+6CcMQ4R8hsp+/V/QZ4VnhOeF54QVhv/CUY8EV+kIoJMIMlkXYNlGvE+020esRgwExGhFJwpvSYdGCTRt11tFmGz32MOAAI46QMLkpHbQs0LbBeh1st8FeDxwMwNEITDQrN66mFY61gqsV+v28cC0gbib9lH6hLrSFnjAQRkIi3JD+FWm9S9ohpZ/ST+mn9FP6Oddflf6a9B9Lvyv9fekPpT+R/pn0U/oF+Uf5R/lH+Uf5R/l314vQNDFafgo3ILyfCPMr4f9JBGP5W+ug0vDgtAyaXR+uCWCGEYIoRjxOQe0zvQpoHNBvgoELRgaMAzCN0VFtXqMC03Lgd5sIjItoaBBHAdJxDKpXWPFARzlNH3SVZyKtIy5OxdbgVRowTgt+s4vANYjMEHEQIY3HyAVUKH2UPkofpY/SR+ljilxAxWvAMS00/a5qNDDREEEcIU7HeP1D4u2PiTtfEs1vtUc/EJ8PiW8eEt/9JnWq31P9RvX7qj9Q/ZHqj1V/qvo7ssij6qPqo+qj6pOWWDpSaVA6GvKnJX+68sfIn6H8ieTPWP7gnprsg1eA994HnI8A+2vgrR+BN34HXtXiR8Inwn3i4BeiNiFa6pu+cC4cHByoh6o4PDxUH9VwdHSkXjrWu9JWP7k4OTlRT/Vxeno6fx/Pz8/VWwmyLFN/5R0+Ef4VpsJj4R/hb2SPifvK6+QvsnYp/6nhFpf8yEP5qWyM87EdthZjvBqlbE5f5mNzgnVFX65GYUIZXZiwJOfSSvg1u6YvihPW7Jq/uLi4xmOTvyzw1hav7MUCax6b/EpBzhfTFxOWDy9JX/KXT+ax5d81HgX/rTIe6/2zyvnljFW8hEcxbpVPuAoX+eLd6t7avN0K4kn8Ux61KWrdH4XLhuZVf61P10va5kvLveJLDVnz2+x8xpIvZ69X/X94bNHkxGGGfYbY09fglr4oO9M97ExeArLPBAUS4ZHwgNg5m6Nz64yhkAgTgWcPyC8ezdxuMnX2sqmzn336zv7EsivT3aoz26263K3qL+9l8q83yamzwMzlf5Cg6LO+CAAA'
+$FormIconGZip = [System.Convert]::FromBase64String($FormIconGZipBase64)
+$FormIconGZipMemoryStream = New-Object System.IO.MemoryStream(, $FormIconGZip)
+$FormIconMemoryStream = New-Object System.IO.MemoryStream
+$GZipStream = New-Object System.IO.Compression.GzipStream $FormIconGZipMemoryStream, ([IO.Compression.CompressionMode]::Decompress)
+$GZipStream.CopyTo( $FormIconMemoryStream )
+$GZipStream.Close()
+$FormIconGZipMemoryStream.Close()
+$Form.Icon = [System.Drawing.Icon]::FromHandle(([System.Drawing.Bitmap]::new($FormIconMemoryStream).GetHIcon()))
 
 # 時刻フォームの設定
 $TimePicker = New-Object System.Windows.Forms.DateTimePicker
@@ -177,7 +210,6 @@ function UnregisterButton_Click(){
     UnregisterTask
 }
 $UnregisterButton.Add_Click({UnregisterButton_Click})
-
 
 $Form.Add_Shown({$Form.Activate()})
 [void] $Form.ShowDialog()
