@@ -155,6 +155,14 @@ $TimePicker.Size = New-Object System.Drawing.Size(80,24)
 $TimePicker.Format = [Windows.Forms.DateTimePickerFormat]::Custom
 $TimePicker.CustomFormat = "HH:mm"
 $TimePicker.ShowUpDown = $true
+$TimePickerWheelHandler = {
+    if ($_.Delta -gt 0) {
+        [System.Windows.Forms.SendKeys]::Send('{UP}')
+    } else {
+        [System.Windows.Forms.SendKeys]::Send('{DOWN}')
+    }
+}
+$TimePicker.add_MouseWheel($TimePickerWheelHandler)
 
 # 時刻の文字が小さいので大きめにする
 $CurrentFont = $TimePicker.Font
