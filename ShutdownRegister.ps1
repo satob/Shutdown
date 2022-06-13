@@ -33,8 +33,8 @@ TODO:
   [ ] 設定を保存できるようにする。自己書き換えできる？
   [ ] シャットダウンまでのタイムアウト時間を設定可能にする
   [ ] 日付けまたぎの処理ができるようにする（TimeSpan.TicksPerMinuteを使う？）
-  [ ] TimePickerで時と分が連動して増加/減少するようにする
-  [ ] マウスホイールで時間の増減ができるように、またはプルダウンでもよい
+  [v] TimePickerで時と分が連動して増加/減少するようにする
+  [v] マウスホイールで時間の増減ができるように、またはプルダウンでもよい
   [ ] shutdown.exeが走ったあとにタスクがちゃんと消えるようにする
   [v] ライセンスとファイルを一体化
   [ ] タスクスケジューラのルートフォルダにすでに「Shutdown」というタスクがあった場合に以下のエラーが出る問題の対処
@@ -48,8 +48,7 @@ TODO:
   --------------------------------
   [v] すでに登録されていた場合はエラーを返すのではなく削除してから再登録にする
   [v] 実行時にコマンドプロンプトを隠す
-  [v] ウィンドウにアイコンを変更する
-  [ ] タスクバーのアイコンを変更する
+  [v] ウィンドウのアイコンを変更する
 #>
 Add-Type -Name Window -Namespace Console -MemberDefinition '
 [DllImport("Kernel32.dll")]
@@ -171,9 +170,24 @@ $TimePicker.Font = $NewFont
 
 # 時刻は最低でも5分後
 $TimePicker.Value = (Roundup5Minutes(Get-Date))
-
 $Form.Controls.Add($TimePicker)
 
+# 値の変更時に分と時を連携する
+$Script:CurrentTimePickerValue = $TimePicker.Value
+$Script:NowChangingHours = $False
+$TimePickerValueChangeHandler = {
+    Param($Sender)
+    if ($Script:CurrentTimePickerValue.Minute -eq 59 -and $Sender.Value.Minute -eq 0 -and $Script:NowChangingHours -eq $False) {
+        $Script:NowChangingHours = $True
+        $Sender.Value = $Sender.Value.AddHours(1)
+    } elseif ($Script:CurrentTimePickerValue.Minute -eq 0 -and $Sender.Value.Minute -eq 59 -and $Script:NowChangingHours -eq $False) {
+        $Script:NowChangingHours = $True
+        $Sender.Value = $Sender.Value.AddHours(-1)
+    }
+    $Script:NowChangingHours = $False
+    $Script:CurrentTimePickerValue = $Sender.Value
+}
+$TimePicker.add_ValueChanged($TimePickerValueChangeHandler)
 
 # 再起動/シャットダウン ラジオボタンの設定
 $RebootGroupBox = New-Object System.Windows.Forms.GroupBox
