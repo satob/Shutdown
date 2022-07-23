@@ -38,6 +38,7 @@ TODO:
   [ ] shutdown.exeが走ったあとにタスクがちゃんと消えるようにする
   [v] ライセンスとファイルを一体化
   [ ] タスクスケジューラのルートフォルダにすでに「Shutdown」というタスクがあった場合に以下のエラーが出る問題の対処
+  [v] HungAppTimeoutを待つようStop-Computer/Restart-Computerでシャットダウンするようにする
   --------------------------------
   Register-ScheduledTask : アクセスが拒否されました。
   発生場所 C:\home\satob\git\Shutdown\ShutdownRegister.ps1:55 文字:9
@@ -59,17 +60,23 @@ public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
 '
 
 $TimeoutPeriod = 300
+$LatencyToForceShutdown = 20
 
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
 [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
 
-$TaskName = "Shutdown"
+$ShutdownExeTaskName = "Shutdown"
+$CmdletTaskName = "ShutdownCmdlet"
 $TaskPath = "\Shutdown\"
 
 function UnregisterTask() {
-    $Task = (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
+    $Task = (Get-ScheduledTask -TaskName $ShutdownExeTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
     if ($Task -ne $null) {
         Unregister-ScheduledTask -TaskName $Task.TaskName -AsJob
+        $CmdletTask = (Get-ScheduledTask -TaskName $CmdletTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
+        if ($CmdletTask -ne $null) {
+            Unregister-ScheduledTask -TaskName $CmdletTask.TaskName -AsJob
+        }
         Start-Process -FilePath shutdown.exe -ArgumentList "/a" -Wait
         [Windows.Forms.MessageBox]::Show("シャットダウンを解除しました。", "シャットダウン解除済み")
     } else {
@@ -83,27 +90,45 @@ function RegisterTask {
         [bool] $Reboot
     )
 
-    $TriggerTime = [DateTime]($DateTime.AddSeconds(-$TimeoutPeriod).ToShortTimeString())
+    # shutdown.exeの実行を開始する（全画面メッセージを表示する）時刻
+    $ShutdownExeTriggerTime = [DateTime]($DateTime.AddSeconds(-$TimeoutPeriod).ToShortTimeString())
 
-    if ((Get-Date) -ge $TriggerTime) {
+    # Stop-Computer/Restart-Computerを実行する時刻
+    # 指定した時刻（分）ぴったりに実行開始する
+    $ActualShutdownTriggerTime = [DateTime]($DateTime.ToShortTimeString())
+
+    # 直近の時刻すぎる場合はエラーとする
+    if ((Get-Date) -ge $ShutdownExeTriggerTime) {
         $LatestTime = (Get-Date).AddSeconds($TimeoutPeriod + 60).ToShortTimeString()
         [Windows.Forms.MessageBox]::Show("シャットダウン設定可能時刻は" + $LatestTime + "以降です。", "時刻指定エラー")
         return
     }
 
-    $Task = (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
-    if ($Task -ne $null) {
-        Unregister-ScheduledTask -TaskName $Task.TaskName -AsJob
+    # すでにシャットダウン登録済みの場合は登録解除する
+    $ShutdownExeTask = (Get-ScheduledTask -TaskName $ShutdownExeTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
+    if ($ShutdownExeTask -ne $null) {
+        Unregister-ScheduledTask -TaskName $ShutdownExeTask.TaskName -AsJob
+
+        $CmdletTask = (Get-ScheduledTask -TaskName $CmdletTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
+        if ($CmdletTask -ne $null) {
+            Unregister-ScheduledTask -TaskName $CmdletTask.TaskName -AsJob
+        }
+        # shutdown.exeが始まっている場合は停止する
         Start-Process -FilePath shutdown.exe -ArgumentList "/a" -Wait
     }
 
+    # Stop-Computer/Restart-Computerを実行してからshutdown.exeによるシャットダウンが始まるまで余裕を持たせる
     if ($Reboot) {
-        $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/r /t " + $TimeoutPeriod)
+        $ShutdownExeTaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/r /t " + ($TimeoutPeriod + $LatencyToForceShutdown))
+        $CmdletTaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "Restart-Computer"
     } else {
-        $TaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + $TimeoutPeriod)
+        $ShutdownExeTaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + ($TimeoutPeriod + $LatencyToForceShutdown))
+        $CmdletTaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "Stop-Computer"
     }
-    $TaskTrigger = New-ScheduledTaskTrigger -Once -At $TriggerTime
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger
+    $ShutdownExeTaskTrigger = New-ScheduledTaskTrigger -Once -At $ShutdownExeTriggerTime
+    $CmdletTaskTrigger = New-ScheduledTaskTrigger -Once -At $ActualShutdownTriggerTime
+    Register-ScheduledTask -TaskPath $TaskPath -TaskName $ShutdownExeTaskName -Action $ShutdownExeTaskAction -Trigger $ShutdownExeTaskTrigger
+    Register-ScheduledTask -TaskPath $TaskPath -TaskName $CmdletTaskName -Action $CmdletTaskAction -Trigger $CmdletTaskTrigger
     [Windows.Forms.MessageBox]::Show("シャットダウン (" + $DateTime.ToShortTimeString() + ") を登録しました。", "シャットダウン登録済み")
 }
 
