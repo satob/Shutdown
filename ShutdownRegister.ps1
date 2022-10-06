@@ -28,7 +28,6 @@ TODO:
   [v] shutdown.exeが走ったあとでも取り消しができるように
   [v] 過去時刻 or 現在時刻＋タイムアウトより前の時間指定はエラーにする
   [x] UIをXAMLで作り直す -> TimePickerはWinUIがないと使えない＆XAMLのTimePickerにスピンボタンがないため不適
-  [ ] 時刻は15分刻みで上下するようスピンボタンの動作を変更 -> キーボードからの時刻入力と併用できない？
   [v] シャットダウンしたらまずい環境（管理者権限のないCitrix上のVMなど）のため、シャットダウンでなく再起動(shutdown.exe /r /t 300)ができるように
   [ ] 設定を保存できるようにする。自己書き換えできる？
   [ ] シャットダウンまでのタイムアウト時間を設定可能にする
@@ -38,7 +37,6 @@ TODO:
   [ ] shutdown.exeが走ったあとにタスクがちゃんと消えるようにする
   [v] ライセンスとファイルを一体化
   [ ] タスクスケジューラのルートフォルダにすでに「Shutdown」というタスクがあった場合に以下のエラーが出る問題の対処
-  [v] HungAppTimeoutを待つようStop-Computer/Restart-Computerでシャットダウンするようにする
   --------------------------------
   Register-ScheduledTask : アクセスが拒否されました。
   発生場所 C:\home\satob\git\Shutdown\ShutdownRegister.ps1:55 文字:9
@@ -47,6 +45,7 @@ TODO:
       + CategoryInfo          : PermissionDenied: (PS_ScheduledTask:Root/Microsoft/...S_ScheduledTask) [Register-ScheduledTask], CimException
       + FullyQualifiedErrorId : HRESULT 0x80070005,Register-ScheduledTask
   --------------------------------
+  [v] HungAppTimeoutを待つようStop-Computer/Restart-Computerでシャットダウンするようにする
   [v] すでに登録されていた場合はエラーを返すのではなく削除してから再登録にする
   [v] 実行時にコマンドプロンプトを隠す
   [v] ウィンドウのアイコンを変更する
@@ -127,8 +126,10 @@ function RegisterTask {
     }
     $ShutdownExeTaskTrigger = New-ScheduledTaskTrigger -Once -At $ShutdownExeTriggerTime
     $CmdletTaskTrigger = New-ScheduledTaskTrigger -Once -At $ActualShutdownTriggerTime
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName $ShutdownExeTaskName -Action $ShutdownExeTaskAction -Trigger $ShutdownExeTaskTrigger
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName $CmdletTaskName -Action $CmdletTaskAction -Trigger $CmdletTaskTrigger
+
+    $ScheduledTaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries
+    Register-ScheduledTask -TaskPath $TaskPath -TaskName $ShutdownExeTaskName -Action $ShutdownExeTaskAction -Trigger $ShutdownExeTaskTrigger -Settings $ScheduledTaskSettings
+    Register-ScheduledTask -TaskPath $TaskPath -TaskName $CmdletTaskName -Action $CmdletTaskAction -Trigger $CmdletTaskTrigger -Settings $ScheduledTaskSettings
     [Windows.Forms.MessageBox]::Show("シャットダウン (" + $DateTime.ToShortTimeString() + ") を登録しました。", "シャットダウン登録済み")
 }
 
@@ -144,8 +145,8 @@ function Roundup5Minutes() {
 
 
 # コマンドプロンプトを隠す
-$consolePtr = [Console.Window]::GetConsoleWindow()
-[Console.Window]::ShowWindow($consolePtr, 0)
+#$consolePtr = [Console.Window]::GetConsoleWindow()
+#[Console.Window]::ShowWindow($consolePtr, 0)
 
 # フォームの作成
 $Form = New-Object System.Windows.Forms.Form
