@@ -86,7 +86,8 @@ function UnregisterTask() {
 function RegisterTask {
     Param(
         $DateTime,
-        [bool] $Reboot
+        [bool] $Reboot,
+        [bool] $SlideToShutdown
     )
 
     # shutdown.exeの実行を開始する（全画面メッセージを表示する）時刻
@@ -120,6 +121,9 @@ function RegisterTask {
     if ($Reboot) {
         $ShutdownExeTaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/r /t " + ($TimeoutPeriod + $LatencyToForceShutdown))
         $CmdletTaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "Restart-Computer"
+    } elseif ($SlideToShutdown) {
+        $ShutdownExeTaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + ($TimeoutPeriod + $LatencyToForceShutdown))
+        $CmdletTaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "shutdown.exe /a; SlideToShutdown.exe"
     } else {
         $ShutdownExeTaskAction = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument ("/s /t " + ($TimeoutPeriod + $LatencyToForceShutdown))
         $CmdletTaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "Stop-Computer"
@@ -150,7 +154,7 @@ function Roundup5Minutes() {
 
 # フォームの作成
 $Form = New-Object System.Windows.Forms.Form
-$Form.Size = New-Object System.Drawing.Size(300,120)
+$Form.Size = New-Object System.Drawing.Size(480,130)
 $Form.FormBorderStyle = [Windows.Forms.FormBorderStyle]::FixedSingle
 $Form.Text = "シャットダウン設定君"
 
@@ -175,8 +179,8 @@ $Form.Icon = [System.Drawing.Icon]::FromHandle(([System.Drawing.Bitmap]::new($Fo
 
 # 時刻フォームの設定
 $TimePicker = New-Object System.Windows.Forms.DateTimePicker
-$TimePicker.Location = New-Object System.Drawing.Point(10,10)
-$TimePicker.Size = New-Object System.Drawing.Size(80,24)
+$TimePicker.Location = New-Object System.Drawing.Point(12,12)
+$TimePicker.Size = New-Object System.Drawing.Size(95,29)
 $TimePicker.Format = [Windows.Forms.DateTimePickerFormat]::Custom
 $TimePicker.CustomFormat = "HH:mm"
 $TimePicker.ShowUpDown = $true
@@ -191,7 +195,7 @@ $TimePicker.add_MouseWheel($TimePickerWheelHandler)
 
 # 時刻の文字が小さいので大きめにする
 $CurrentFont = $TimePicker.Font
-$NewFont = New-Object System.Drawing.Font($CurrentFont.Name, 14, $CurrentFont.Style, $CurrentFont.Unit)
+$NewFont = New-Object System.Drawing.Font($CurrentFont.Name, 20, $CurrentFont.Style, $CurrentFont.Unit)
 $TimePicker.Font = $NewFont
 
 # 時刻は最低でも5分後
@@ -217,40 +221,45 @@ $TimePicker.add_ValueChanged($TimePickerValueChangeHandler)
 
 # 再起動/シャットダウン ラジオボタンの設定
 $RebootGroupBox = New-Object System.Windows.Forms.GroupBox
-$RebootGroupBox.Location = New-Object System.Drawing.Point(100,4)
-$RebootGroupBox.size = New-Object System.Drawing.Size(170,36)
+$RebootGroupBox.Location = New-Object System.Drawing.Point(118,9)
+$RebootGroupBox.size = New-Object System.Drawing.Size(330,36)
 
 $RebootRadio = New-Object System.Windows.Forms.RadioButton
 $RebootRadio.Location = New-Object System.Drawing.Point(10,8)
-$RebootRadio.size = New-Object System.Drawing.Size(60,25)
+$RebootRadio.size = New-Object System.Drawing.Size(90,25)
 $RebootRadio.Checked = $True
-$RebootRadio.Text = "再起動"
+$RebootRadio.Text = "自動再起動"
 
 $ShutdownRadio = New-Object System.Windows.Forms.RadioButton
-$ShutdownRadio.Location = New-Object System.Drawing.Point(75,8)
-$ShutdownRadio.size = New-Object System.Drawing.Size(90,25)
-$ShutdownRadio.Text = "シャットダウン"
+$ShutdownRadio.Location = New-Object System.Drawing.Point(100,8)
+$ShutdownRadio.size = New-Object System.Drawing.Size(110,25)
+$ShutdownRadio.Text = "自動シャットダウン"
 
-$RebootGroupBox.Controls.AddRange(@($RebootRadio,$ShutdownRadio))
+$SlideToShutdownRadio = New-Object System.Windows.Forms.RadioButton
+$SlideToShutdownRadio.Location = New-Object System.Drawing.Point(215,8)
+$SlideToShutdownRadio.Size = New-Object System.Drawing.Size(110,25)
+$SlideToShutdownRadio.Text = "手動シャットダウン"
+
+$RebootGroupBox.Controls.AddRange(@($RebootRadio,$ShutdownRadio,$SlideToShutdownRadio))
 $Form.Controls.Add($RebootGroupBox)
 
 
 # 登録ボタンの設定
 $RegisterButton = New-Object System.Windows.Forms.Button
-$RegisterButton.Location = New-Object System.Drawing.Point(100,46)
+$RegisterButton.Location = New-Object System.Drawing.Point(130,56)
 $RegisterButton.Size = New-Object System.Drawing.Size(80,25)
 $RegisterButton.Text = "登録する"
 $Form.Controls.Add($RegisterButton)
 
 function RegisterButton_Click(){
-    RegisterTask -DateTime $TimePicker.Value -Reboot $RebootRadio.Checked
+    RegisterTask -DateTime $TimePicker.Value -Reboot $RebootRadio.Checked -SlideToShutdown $SlideToShutdownRadio.Checked
 }
 $RegisterButton.Add_Click({RegisterButton_Click})
 
 
 # 解除ボタンの設定
 $UnregisterButton = New-Object System.Windows.Forms.Button
-$UnregisterButton.Location = New-Object System.Drawing.Point(190,46)
+$UnregisterButton.Location = New-Object System.Drawing.Point(220,56)
 $UnregisterButton.Size = New-Object System.Drawing.Size(80,25)
 $UnregisterButton.Text = "解除する"
 $Form.Controls.Add($UnregisterButton)
