@@ -149,8 +149,8 @@ function Roundup5Minutes() {
 
 
 # コマンドプロンプトを隠す
-#$consolePtr = [Console.Window]::GetConsoleWindow()
-#[Console.Window]::ShowWindow($consolePtr, 0)
+$consolePtr = [Console.Window]::GetConsoleWindow()
+[Console.Window]::ShowWindow($consolePtr, 0)
 
 # フォームの作成
 $Form = New-Object System.Windows.Forms.Form
