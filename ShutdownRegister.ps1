@@ -224,21 +224,37 @@ $RebootGroupBox = New-Object System.Windows.Forms.GroupBox
 $RebootGroupBox.Location = New-Object System.Drawing.Point(118,9)
 $RebootGroupBox.size = New-Object System.Drawing.Size(330,36)
 
+# ツールチップの作成
+$ToolTip = New-Object System.Windows.Forms.ToolTip
+$ToolTip.AutoPopDelay = 10000
+$ToolTip.InitialDelay = 500
+$ToolTip.ReshowDelay = 100
+$ToolTip.ShowAlways = $true
+
 $RebootRadio = New-Object System.Windows.Forms.RadioButton
 $RebootRadio.Location = New-Object System.Drawing.Point(10,8)
 $RebootRadio.size = New-Object System.Drawing.Size(90,25)
 $RebootRadio.Checked = $True
 $RebootRadio.Text = "自動再起動"
 
+# 自動再起動ラジオボタンにツールチップを設定
+$ToolTip.SetToolTip($RebootRadio, "指定した時刻に自動的に再起動を開始します。`n再起動開始後のキャンセルはできません。`nキャンセルする場合は登録解除を実行してください。")
+
 $ShutdownRadio = New-Object System.Windows.Forms.RadioButton
 $ShutdownRadio.Location = New-Object System.Drawing.Point(100,8)
 $ShutdownRadio.size = New-Object System.Drawing.Size(110,25)
 $ShutdownRadio.Text = "自動シャットダウン"
 
+# 自動シャットダウンラジオボタンにツールチップを設定
+$ToolTip.SetToolTip($ShutdownRadio, "指定した時刻に自動的にシャットダウンを開始します。`nシャットダウン開始後のキャンセルはできません。`nキャンセルする場合は登録解除を実行してください。")
+
 $SlideToShutdownRadio = New-Object System.Windows.Forms.RadioButton
 $SlideToShutdownRadio.Location = New-Object System.Drawing.Point(215,8)
 $SlideToShutdownRadio.Size = New-Object System.Drawing.Size(110,25)
 $SlideToShutdownRadio.Text = "手動シャットダウン"
+
+# 手動シャットダウンラジオボタンにツールチップを設定
+$ToolTip.SetToolTip($SlideToShutdownRadio, "指定した時刻にシャットダウンを開始します。`nシャットダウン開始後でも、画面を上にスライドすることでにキャンセルが可能です。")
 
 $RebootGroupBox.Controls.AddRange(@($RebootRadio,$ShutdownRadio,$SlideToShutdownRadio))
 $Form.Controls.Add($RebootGroupBox)
