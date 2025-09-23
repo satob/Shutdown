@@ -291,6 +291,54 @@ $ToolTip.SetToolTip($SlideToShutdownRadio, "指定した時刻にシャットダ
 $RebootGroupBox.Controls.AddRange(@($RebootRadio,$ShutdownRadio,$SlideToShutdownRadio))
 $Form.Controls.Add($RebootGroupBox)
 
+function LoadConfiguration {
+    $ConfigTaskName = "ShutdownConfig"
+    
+    try {
+        # 設定タスクを取得
+        $ConfigTask = Get-ScheduledTask -TaskName $ConfigTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue
+        
+        if ($ConfigTask -ne $null -and $ConfigTask.Description -ne $null -and $ConfigTask.Description.Trim() -ne "") {
+            # JSON設定を解析
+            $Config = $ConfigTask.Description | ConvertFrom-Json
+            
+            # 保存された設定に応じてラジオボタンを設定
+            switch ($Config.SelectedMode) {
+                "Reboot" {
+                    $RebootRadio.Checked = $true
+                    $ShutdownRadio.Checked = $false
+                    $SlideToShutdownRadio.Checked = $false
+                }
+                "Shutdown" {
+                    $RebootRadio.Checked = $false
+                    $ShutdownRadio.Checked = $true
+                    $SlideToShutdownRadio.Checked = $false
+                }
+                "SlideToShutdown" {
+                    $RebootRadio.Checked = $false
+                    $ShutdownRadio.Checked = $false
+                    $SlideToShutdownRadio.Checked = $true
+                }
+                default {
+                    # デフォルトは自動再起動
+                    $RebootRadio.Checked = $true
+                    $ShutdownRadio.Checked = $false
+                    $SlideToShutdownRadio.Checked = $false
+                }
+            }
+        } else {
+            # 設定が見つからない場合はデフォルト（自動再起動）
+            $RebootRadio.Checked = $true
+            $ShutdownRadio.Checked = $false
+            $SlideToShutdownRadio.Checked = $false
+        }
+    } catch {
+        # エラーが発生した場合はデフォルト（自動再起動）
+        $RebootRadio.Checked = $true
+        $ShutdownRadio.Checked = $false
+        $SlideToShutdownRadio.Checked = $false
+    }
+}
 
 # 登録ボタンの設定
 $RegisterButton = New-Object System.Windows.Forms.Button
@@ -299,7 +347,48 @@ $RegisterButton.Size = New-Object System.Drawing.Size(80,25)
 $RegisterButton.Text = "登録する"
 $Form.Controls.Add($RegisterButton)
 
+function SaveConfiguration {
+    Param(
+        [bool] $Reboot,
+        [bool] $Shutdown,
+        [bool] $SlideToShutdown
+    )
+    
+    $ConfigTaskName = "ShutdownConfig"
+    
+    # 選択されたモードをJSON形式の設定文字列にする
+    $SelectedMode = if ($Reboot) { "Reboot" } elseif ($Shutdown) { "Shutdown" } elseif ($SlideToShutdown) { "SlideToShutdown" }
+    $Config = @{
+        SelectedMode = $SelectedMode
+        SavedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    } | ConvertTo-Json -Compress
+    
+    # 既存の設定タスクを削除
+    $ExistingConfigTask = (Get-ScheduledTask -TaskName $ConfigTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
+    if ($ExistingConfigTask -ne $null) {
+        Unregister-ScheduledTask -TaskName $ExistingConfigTask.TaskName -TaskPath $TaskPath -AsJob
+        # 1秒待たないと削除が完了しない
+        # cf. https://stackoverflow.com/q/79772746
+        Start-Sleep 1
+    }
+    
+    # 設定保存用のダミータスクを作成
+    $ConfigTaskAction = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c echo config"
+    $UnixEpochDate = [DateTime]::new(1970, 1, 1)
+    $ConfigTaskTrigger = New-ScheduledTaskTrigger -Once -At $UnixEpochDate
+    $ConfigTaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries
+    
+    # タスクを登録（実行されないようトリガーを無効にする）
+    $Task = Register-ScheduledTask -TaskPath $TaskPath -TaskName $ConfigTaskName -Action $ConfigTaskAction -Trigger $ConfigTaskTrigger -Settings $ConfigTaskSettings -Description $Config
+    $Task.Triggers[0].Enabled = $false
+    Set-ScheduledTask -InputObject $Task
+}
+
 function RegisterButton_Click(){
+    # 設定を保存
+    SaveConfiguration -Reboot $RebootRadio.Checked -Shutdown $ShutdownRadio.Checked -SlideToShutdown $SlideToShutdownRadio.Checked
+    
+    # シャットダウンタスクを登録
     RegisterTask -DateTime $TimePicker.Value -Reboot $RebootRadio.Checked -SlideToShutdown $SlideToShutdownRadio.Checked
 }
 $RegisterButton.Add_Click({RegisterButton_Click})
@@ -315,6 +404,9 @@ function UnregisterButton_Click(){
     UnregisterTask
 }
 $UnregisterButton.Add_Click({UnregisterButton_Click})
+
+# 起動時に保存された設定を読み込み
+LoadConfiguration
 
 $Form.Add_Shown({$Form.Activate()})
 [void] $Form.ShowDialog()
