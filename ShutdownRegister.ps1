@@ -173,7 +173,9 @@ function Hide-ConsoleWindow() {
     # When you call ShowWindowAsync(HWND, 0) with the HWND from GetConsoleWindow(),
     # the Windows Terminal window will be just minimized rather than hidden.
     $hwnd = $TerminalProcess.MainWindowHandle
-    if ($hwnd -ne [System.IntPtr]::Zero) {
+    if ($hwnd -eq $null) {
+      # Do nothing: MainWindowHandle will be null when you run from the terminal pane in VSCode
+    } elseif ($hwnd -ne [System.IntPtr]::Zero) {
       $ShowWindowAsync::ShowWindowAsync($hwnd, 0)
     } else {
       Write-Host "Failed to hide the console window."
