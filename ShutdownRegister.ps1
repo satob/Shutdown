@@ -368,10 +368,7 @@ function SaveConfiguration {
     # 既存の設定タスクを削除
     $ExistingConfigTask = (Get-ScheduledTask -TaskName $ConfigTaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue)
     if ($ExistingConfigTask -ne $null) {
-        Unregister-ScheduledTask -TaskName $ExistingConfigTask.TaskName -TaskPath $TaskPath -AsJob
-        # 1秒待たないと削除が完了しない
-        # cf. https://stackoverflow.com/q/79772746
-        Start-Sleep 1
+        Unregister-ScheduledTask -TaskName $ExistingConfigTask.TaskName -TaskPath $TaskPath -Confirm:$false
     }
     
     # 設定保存用のダミータスクを作成
